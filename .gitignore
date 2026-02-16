@@ -1,0 +1,6 @@
+commit-msg.txt
+**/*.conf
+**/*.log
+**/*.bkp
+**/*.tmp
+**/bkp

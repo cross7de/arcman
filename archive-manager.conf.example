@@ -1,0 +1,87 @@
+###########################################
+# Global Settings
+###########################################
+LOCKFILE_SUFFIX=.archive.lock # TODO: Check implementation
+
+###########################################
+# Tools
+KEEPASSXC=../tools/KeePassXC.AppImage
+CRYPTOMATOR=../tools/cryptomator.AppImage
+GOCRYPTFS=../tools/gocryptfs
+ECRYPTFS=/usr/bin/mount
+
+###########################################
+# Archives / Scenarios
+###########################################
+# Archive types: Cryptomator, gocryptfs, ecryptfs, KeePassXC, (CryptomatorCLI is still experimental)
+#
+# Proposed ID format (not mandatory):
+#   First character:
+#     <Scenario, uppercase letter>
+#   One of the following:
+#     Characters 2-4:
+#       Characters 2-3: One of the following:
+#         <Execution order, numeric>: Not strictly incremental, rather in blocks,
+#           centered around the value 10*n+5. A number should be the same across all
+#           scenarios, meaning the archive uniquely describes itself.
+#         <Archive abbreviation, alphanumeric>: If order is irrelevant or the archive
+#           is of lesser importance.
+#       Fourth character:
+#         <Tool abbreviation>: The tool used to open the archive. Possible values:
+#           (c)ryptomator
+#           cryptomator-cl(i)
+#           (e)crypfs
+#           (g)ocryptfs
+#           (k)eepassxc
+#     Characters 2-n:
+#       <username> of the ecryptfs home.
+
+
+###########################################
+# Archive Blocks - Order matters.
+#
+# Blocks group archives and appear in the order listed here.
+# Assign an archive to a block using ARCHIVE_<ID>_BLOCK=<BLOCK_ID>.
+# Unassigned archives will be listed last.
+ARCHIVE_BLOCK_PERSONAL=Private Archives
+ARCHIVE_BLOCK_WORK=Work Archives
+ARCHIVE_BLOCK_LUKS=LUKS Volumes (X)  
+
+###########################################
+# Archives / Scenarios - Order does not matter.
+#
+# Archives are sorted alphabetically within their blocks.
+# If no block is assigned, they go to "Unassigned Archives."
+ARCHIVE_A_PATH=/work/archives/projects
+ARCHIVE_B_PATH=/work/archives/passwords.kdbx
+
+ARCHIVE_X_TYPE=gocryptfs
+ARCHIVE_X_PATH=/home/user/photos
+ARCHIVE_X_MOUNTPOINT=/mount/point/photos
+ARCHIVE_X_DESCRIPTION=Photos
+
+ARCHIVE_A_TYPE=Cryptomator
+ARCHIVE_A_DESCRIPTION=Important Projects
+ARCHIVE_A_BLOCK=WORK
+
+ARCHIVE_B_TYPE=KeePassXC
+ARCHIVE_B_DESCRIPTION=Customer Database
+ARCHIVE_B_BLOCK=WORK
+
+ARCHIVE_Y_TYPE=Cryptomator
+ARCHIVE_Y_PATH=/home/user/secrets
+ARCHIVE_Y_DESCRIPTION=Secret Files
+ARCHIVE_Y_BLOCK=PERSONAL
+
+###########################################
+# Scenario X: LUKS Archive
+ARCHIVE_X_TYPE=luks
+ARCHIVE_X_PATH=/dev/disk/by-uuid/<UUID>|/dev/sdXn
+ARCHIVE_X_MOUNTPOINT=/mnt/luks
+ARCHIVE_X_DESCRIPTION=LUKS: luks-by-uuid
+ARCHIVE_X_BLOCK=LUKS
+#ARCHIVE_X_LUKS_INNER=/dev/mapper/<MAPPER>
+ARCHIVE_X_LUKS_NAME=luks_name
+ARCHIVE_X_LUKS_FS=ext4
+#ARCHIVE_X_LUKS_MOUNT_OPTS=noatime
+#ARCHIVE_X_LUKS_KEYFILE=/path/to/keyfile

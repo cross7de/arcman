@@ -680,9 +680,10 @@ get_script_path() {
 update_script() {
     local github_repo="cross7de/arcman"
     local repo_url="https://github.com/$github_repo"
-    local script_name
-    script_name=$(basename "$(get_script_path)")
-    local script_url="$repo_url/raw/main/$script_name"
+
+    # Remote-Dateiname im Repo (lokaler Name ist egal)
+    local upstream_script="archive-manager.sh"
+
     local latest_version latest_tag local_version
     local_version="$VERSION"
 
@@ -713,6 +714,9 @@ update_script() {
     fi
 
     log "Updating script to version $latest_version..."
+
+    # Besser: direkt von raw.githubusercontent.com und vom Tag laden
+    local script_url="https://raw.githubusercontent.com/$github_repo/$latest_tag/$upstream_script"
     log "Downloading new script from: $script_url"
 
     local current_script
@@ -799,7 +803,7 @@ parse_args() {
 # Initialization function
 init() {
 
-    VERSION="1.4.1"
+    VERSION="1.4.2"
 
     # Check if colors are supported (TERM must not be "dumb" and must be outputting to a terminal)
     if [ -t 1 ] && [[ "$TERM" != "dumb" ]]; then

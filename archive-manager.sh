@@ -7,7 +7,10 @@
 # Function to retrieve a value from the .conf file
 get_config_value() {
     local key="$1"
-    grep -E "^$key=" "$CONFIG_FILE" | cut -d'=' -f2-
+    grep -E "^[[:space:]]*${key}[[:space:]]*=" "$CONFIG_FILE" \
+        | head -n1 \
+        | cut -d'=' -f2- \
+        | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
 }
 
 # Function to convert a relative path to an absolute path
@@ -452,7 +455,10 @@ mount_archive() {
 
     # Lockfile is created for gocryptfs, ecryptfs, and CryptomatorCLI.
     if [[ "$archive_type" == "gocryptfs" || "$archive_type" == "ecryptfs" || "$archive_type" == "CryptomatorCLI" ]]; then
-        log "$(hostname) - $(date)" > "$archive_path/$LOCKFILE_SUFFIX"
+        if [ -n "$LOCKFILE_SUFFIX" ]; then
+            printf "%s - %s\n" "$(hostname)" "$(date)" > "$archive_path/$LOCKFILE_SUFFIX" \
+                || warn "Could not write lockfile: $archive_path/$LOCKFILE_SUFFIX"
+        fi
     fi
 }
 
@@ -499,7 +505,9 @@ unmount_archive() {
     esac
 
     # Remove lockfile if present.
-    rm -f "$archive_path/$LOCKFILE_SUFFIX"
+    if [ -n "$LOCKFILE_SUFFIX" ]; then
+        rm -f -- "$archive_path/$LOCKFILE_SUFFIX"
+    fi
     log "Archive $archive_id successfully unmounted."
 }
 
@@ -791,7 +799,7 @@ parse_args() {
 # Initialization function
 init() {
 
-    VERSION="1.4.0"
+    VERSION="1.4.1"
 
     # Check if colors are supported (TERM must not be "dumb" and must be outputting to a terminal)
     if [ -t 1 ] && [[ "$TERM" != "dumb" ]]; then
@@ -816,6 +824,14 @@ init() {
 
     # Load configuration values
     LOCKFILE_SUFFIX=$(get_config_value "LOCKFILE_SUFFIX")
+    LOCKFILE_SUFFIX=$(printf "%s" "$LOCKFILE_SUFFIX" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    if [ -z "$LOCKFILE_SUFFIX" ]; then
+        LOCKFILE_SUFFIX=".arcman.lock"
+        warn "LOCKFILE_SUFFIX not set in config; using default: $LOCKFILE_SUFFIX"
+    fi
+    if [[ "$LOCKFILE_SUFFIX" == */* ]]; then
+        error_exit "LOCKFILE_SUFFIX must be a filename (no '/'): $LOCKFILE_SUFFIX"
+    fi
 
     # Define tools with absolute paths
     KEEPASSXC_CMD=$(get_config_value "KEEPASSXC")

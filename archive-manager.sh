@@ -86,6 +86,7 @@ usage() {
     echo "Commands:"
     echo "  mount <ARCHIVE_ID>   Mount the specified archive"
     echo "  unmount <ARCHIVE_ID> Unmount the specified archive"
+    echo "  umount  <ARCHIVE_ID> Alias for unmount"
     echo "  list [long|ok]       Show all configured archives"
     echo "                         long – detailed view"
     echo "                         ok   – only archives found on disk"
@@ -151,21 +152,72 @@ check_tool_path() {
     return 0
 }
 
-# Cross-platform check if a mount point is active
+# Helper: check if a command exists
+have_cmd() { command -v "$1" >/dev/null 2>&1; }
+
+# Robust unmount (Linux-first; macOS diskutil only if available)
+safe_unmount() {
+    local mount_point="$1"
+
+    [ -z "$mount_point" ] && return 2
+
+    # Prefer fusermount3 on modern Debian, then fusermount
+    if have_cmd fusermount3; then
+        fusermount3 -u "$mount_point" >/dev/null 2>&1 && return 0
+    fi
+    if have_cmd fusermount; then
+        fusermount -u "$mount_point" >/dev/null 2>&1 && return 0
+    fi
+
+    # Standard unmount
+    umount "$mount_point" >/dev/null 2>&1 && return 0
+
+    # If busy, try lazy unmount as last Linux resort
+    umount -l "$mount_point" >/dev/null 2>&1 && return 0
+
+    # macOS fallback (only if diskutil exists)
+    if have_cmd diskutil; then
+        diskutil unmount "$mount_point" >/dev/null 2>&1 && return 0
+    fi
+
+    return 1
+}
+
+# Cross-platform check if a mount point is active (exact mountpoint check)
 is_mounted() {
     local mount_point="$1"
-    if command -v findmnt &>/dev/null; then
-        findmnt | grep -q "$mount_point"
-    elif command -v mount &>/dev/null; then
-        mount | grep -q "$mount_point"
-    elif command -v df &>/dev/null; then
-        df | grep -q "$mount_point"
-    elif command -v diskutil &>/dev/null; then
-        diskutil info "$mount_point" &>/dev/null
-    else
-        warn "No suitable tool found for mount verification!"
-        return 1
+    [ -z "$mount_point" ] && return 1
+
+    # Exact check (Linux): is this path itself a mountpoint?
+    if have_cmd mountpoint; then
+        mountpoint -q "$mount_point" >/dev/null 2>&1
+        return $?
     fi
+
+    if have_cmd findmnt; then
+        # IMPORTANT: --mountpoint checks exact mountpoints (unlike --target)
+        findmnt -rn --mountpoint "$mount_point" >/dev/null 2>&1
+        return $?
+    fi
+
+    # Fallbacks (less exact)
+    if have_cmd mount; then
+        mount | awk '{print $3}' | grep -Fxq "$mount_point"
+        return $?
+    fi
+    if have_cmd df; then
+        df | awk '{print $6}' | grep -Fxq "$mount_point"
+        return $?
+    fi
+
+    # macOS fallback (only if available)
+    if have_cmd diskutil; then
+        diskutil info "$mount_point" >/dev/null 2>&1
+        return $?
+    fi
+
+    warn "No suitable tool found for mount verification!"
+    return 1
 }
 
 # Starts an application (modular, without re-reading the config)
@@ -465,8 +517,15 @@ mount_archive() {
 # Unmount function
 unmount_archive() {
     local archive_id="$1"
+
     local mount_point
     mount_point=$(get_absolute_path "$(get_config_value "ARCHIVE_${archive_id}_MOUNTPOINT")")
+    [ -z "$mount_point" ] && error_exit "Configuration error: ARCHIVE_${archive_id}_MOUNTPOINT is not set or empty."
+    if [ ! -e "$mount_point" ]; then
+        log "Archive $archive_id is not mounted (mount point does not exist: $mount_point)."
+        exit 0
+    fi
+
     local archive_path
     archive_path=$(get_absolute_path "$(get_config_value "ARCHIVE_${archive_id}_PATH")")
     local archive_type
@@ -486,11 +545,12 @@ unmount_archive() {
             "$CRYPTOMATOR_CLI_CMD" lock "$mount_point" || error_exit "Error unmounting $archive_id (CryptomatorCLI)"
             ;;
         gocryptfs)
-            fusermount -u "$mount_point" || umount "$mount_point" || diskutil unmount "$mount_point" || error_exit "Error unmounting $archive_id (gocryptfs)"
+            safe_unmount "$mount_point" || error_exit "Error unmounting $archive_id (gocryptfs)"
             ;;
         ecryptfs)
             require_root
-            fusermount -u "$mount_point" || umount "$mount_point" || diskutil unmount "$mount_point" || error_exit "Error unmounting $archive_id (ecryptfs)"
+            require_root
+            safe_unmount "$mount_point" || error_exit "Error unmounting $archive_id (ecryptfs)"
             ;;
         luks)
             unmount_luks "$archive_id" "$mount_point"
@@ -803,7 +863,7 @@ parse_args() {
 # Initialization function
 init() {
 
-    VERSION="1.4.2"
+    VERSION="1.4.3"
 
     # Check if colors are supported (TERM must not be "dumb" and must be outputting to a terminal)
     if [ -t 1 ] && [[ "$TERM" != "dumb" ]]; then
@@ -864,7 +924,7 @@ main() {
             [ -z "${ARCHIVE_ARGS[1]}" ] && usage
             mount_archive "${ARCHIVE_ARGS[1]}"
             ;;
-        unmount)
+        unmount|umount)
             [ -z "${ARCHIVE_ARGS[1]}" ] && usage
             unmount_archive "${ARCHIVE_ARGS[1]}"
             ;;
